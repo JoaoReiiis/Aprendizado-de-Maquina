@@ -56,7 +56,7 @@ Executando o Crawler
 
 Para iniciar a coleta de dados, navegue até a pasta raiz do projeto no seu terminal (onde o arquivo scrapy.cfg está localizado) e execute o seguinte comando:
 
-scrapy crawl mob -o dados_coletados.json
+python -m scrapy crawl mob -o dados_coletados.json
 
     mob é o nome do spider que fará o rastreamento.
 

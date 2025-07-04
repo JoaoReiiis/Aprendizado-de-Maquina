@@ -3,6 +3,7 @@ from scrapy.loader import ItemLoader
 from ..items import MobilidadeItem
 from urllib.parse import urlparse
 import trafilatura
+import spacy
 
 class FocoMobilidadeSpider(scrapy.Spider):
     name = "mob"
@@ -29,16 +30,23 @@ class FocoMobilidadeSpider(scrapy.Spider):
         'login', 'cadastro', 'assine', 'contato', 'sobre-nos', 
         'politica-de-privacidade', 'termos-de-uso'
     ]
-
+    
     def __init__(self, *args, **kwargs):
         super(FocoMobilidadeSpider, self).__init__(*args, **kwargs)
-        self.max_depth = 5 
+        self.max_depth = 7
+        self.nlp = None
+        
+        try:
+            self.nlp = spacy.load("pt_core_news_lg", disable=["parser", "lemmatizer"])
+        except OSError:
+            raise scrapy.exceptions.CloseSpider("Modelo do spaCy não encontrado.")
+
 
     def parse(self, response):
-        extracted = trafilatura.extract(response.body, include_comments=False, include_tables=True)
+        extracted_content = trafilatura.extract(response.body, include_comments=False, include_tables=True)
         
-        if extracted and self.is_relevant(extracted):
-            yield self.extrair_dados_da_pagina(response, extracted)
+        if extracted_content and self.is_article_page(response, extracted_content):
+            yield self.extrair_dados_da_pagina(response, extracted_content)
 
         current_depth = response.meta.get('depth', 0)
         if current_depth >= self.max_depth:
@@ -54,11 +62,53 @@ class FocoMobilidadeSpider(scrapy.Spider):
                     callback=self.parse,
                     meta={'depth': current_depth + 1}
                 )
-    
+
+    def is_article_page(self, response, content: str) -> bool:
+
+        if len(content) < 512:
+            self.logger.debug(f"Página pulada (conteúdo curto): {response.url}")
+            return False
+        
+        if content.count('...') > 7:
+             self.logger.debug(f"Página pulada (muitos resumos '...'): {response.url}")
+             return False
+
+        menu_like_lines = 0
+        total_lines = 0
+
+        for line in content.splitlines():
+            stripped_line = line.strip()
+            if not stripped_line:
+                continue
+            total_lines += 1
+            words = stripped_line.split()
+            if 1 <= len(words) <= 7 and stripped_line.isupper():
+                menu_like_lines += 1
+
+        if total_lines > 10 and (menu_like_lines / total_lines) > 0.1:
+            self.logger.debug(f"Página pulada (parece ser um menu/índice): {response.url}")
+            return False
+        
+        doc = self.nlp(content)
+        
+        relevant_entities = 0
+        relevant_labels = {'ORG', 'LOC', 'GPE', 'PRODUCT'}
+
+        for ent in doc.ents:
+            if ent.label_ in relevant_labels:
+                relevant_entities += 1
+
+        if relevant_entities < 10:
+            self.logger.debug(f"Página pulada (poucas entidades: {relevant_entities}): {response.url}")
+            return False
+
+        self.logger.info(f"Artigo válido encontrado (Entidades: {relevant_entities}): {response.url}")
+        return True
+
     def is_relevant(self, text_content: str) -> bool:
         text_lower = text_content.lower()
         count = sum(1 for keyword in self.KEYWORDS if keyword in text_lower)
-        return count > 3
+        return count >= 3
 
     def extrair_dados_da_pagina(self, response, extracted_content: str):
         loader = ItemLoader(item=MobilidadeItem(), response=response)
