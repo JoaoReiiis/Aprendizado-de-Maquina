@@ -11,8 +11,7 @@ class FocoMobilidadeSpider(scrapy.Spider):
     start_urls = [
         "https://mobilidade.estadao.com.br/",
         "https://www.mobilize.org.br/noticias/",
-        "https://summit.estadao.com.br/mobilidade/",
-        "https://viatrolebus.com.br/"
+        "https://valedosinconfidentes.com.br/"
     ]
         
     KEYWORDS = [
@@ -33,7 +32,7 @@ class FocoMobilidadeSpider(scrapy.Spider):
     
     def __init__(self, *args, **kwargs):
         super(FocoMobilidadeSpider, self).__init__(*args, **kwargs)
-        self.max_depth = 7
+        self.max_depth = 10
         self.nlp = None
         
         try:
@@ -65,11 +64,16 @@ class FocoMobilidadeSpider(scrapy.Spider):
 
     def is_article_page(self, response, content: str) -> bool:
 
+        parsed_url = urlparse(response.url)
+        if not parsed_url.path or parsed_url.path == '/':
+            self.logger.debug(f"Página pulada (URL é uma página raiz): {response.url}")
+            return False
+        
         if len(content) < 512:
             self.logger.debug(f"Página pulada (conteúdo curto): {response.url}")
             return False
         
-        if content.count('...') > 7:
+        if content.count('...') > 5:
              self.logger.debug(f"Página pulada (muitos resumos '...'): {response.url}")
              return False
 
@@ -85,7 +89,7 @@ class FocoMobilidadeSpider(scrapy.Spider):
             if 1 <= len(words) <= 7 and stripped_line.isupper():
                 menu_like_lines += 1
 
-        if total_lines > 10 and (menu_like_lines / total_lines) > 0.1:
+        if total_lines > 10 and (menu_like_lines / total_lines) > 0.2:
             self.logger.debug(f"Página pulada (parece ser um menu/índice): {response.url}")
             return False
         

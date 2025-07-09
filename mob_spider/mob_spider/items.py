@@ -6,39 +6,48 @@ import dateparser
 import unicodedata
 
 def safe_remove_tags(value):
-    """Remove tags HTML de forma segura."""
     if value is None: return ""
     return remove_tags(str(value))
 
 def clean_text(text):
-    """Limpa e normaliza o texto."""
     if text is None: return ""
     text = unicodedata.normalize('NFC', text)
     return text.strip()
 
 def parse_date(date_str: str):
-    """
-    Converte uma string de data para o formato YYYY-MM-DD.
-    Retorna uma string vazia ("") se a conversão falhar.
-    """
     if not date_str:
-        return ""  # Retorna string vazia se a entrada for vazia
+        return ""
     try:
         parsed_date = dateparser.parse(date_str, languages=['pt'])
-        # Retorna string vazia se o dateparser não conseguir converter
         return parsed_date.strftime('%Y-%m-%d') if parsed_date else ""
     except (TypeError, ValueError):
-        # Retorna string vazia em caso de outros erros
         return ""
 
 def process_content(text_block):
     
     if not text_block: return ""
 
+    footer_triggers = [
+        "leia também:", "leia mais:", "veja também", "receba a newsletter", 
+        "para saber mais", "fontes", "referências", "créditos"
+    ]
+
     lines = text_block.splitlines()
     
+    cutoff_index = len(lines)
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        for trigger in footer_triggers:
+            if trigger in line_lower:
+                cutoff_index = i
+                break
+        if cutoff_index != len(lines):
+            break
+    
+    main_content_lines = lines[:cutoff_index]
+
     cleaned_lines = []
-    for line in lines:
+    for line in main_content_lines:
         normalized_line = re.sub(r'\s+', ' ', line).strip()
         if normalized_line:
             cleaned_lines.append(normalized_line)
